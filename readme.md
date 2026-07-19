@@ -1,6 +1,22 @@
-# Real-Time Event-Driven RAG Pipeline
+<div align="center">
 
-> A production-inspired event-driven pipeline that continuously synchronizes PostgreSQL data with a vector database using Change Data Capture (CDC), Apache Kafka, PySpark Structured Streaming, Ollama, and Qdrant.
+# ⚡ Real-Time Event-Driven RAG Pipeline
+
+**Production-inspired event-driven vector indexing using PostgreSQL CDC, Debezium, Apache Kafka, PySpark Structured Streaming, Ollama, and Qdrant.**
+
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
+![Spark](https://img.shields.io/badge/PySpark-3.5.1-E25A1C?logo=apachespark&logoColor=white)
+![Kafka](https://img.shields.io/badge/Apache-Kafka-black?logo=apachekafka)
+![Postgres](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Debezium](https://img.shields.io/badge/Debezium-CDC-blue)
+![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-red)
+![Ollama](https://img.shields.io/badge/Ollama-Local_Embeddings-black)
+
+</div>
+
+---
+
+## 📖 Overview
 
 Traditional RAG systems typically rely on scheduled ETL jobs to regenerate embeddings, introducing synchronization delays and unnecessary recomputation. This project demonstrates an event-driven alternative where every database mutation is captured directly from PostgreSQL's Write-Ahead Log (WAL) and propagated through a streaming pipeline, enabling near real-time semantic indexing.
 
