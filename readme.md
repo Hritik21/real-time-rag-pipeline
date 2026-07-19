@@ -1,73 +1,268 @@
 # Real-Time Event-Driven RAG Pipeline
 
-This repository demonstrates a local, low-latency, real-time Retrieval-Augmented Generation (RAG) architecture. Rather than relying on scheduled batch ETL jobs to update a vector database, this pipeline utilizes Change Data Capture (CDC) to stream database mutations instantly into a semantic search vector store.
+> A production-inspired event-driven pipeline that continuously synchronizes PostgreSQL data with a vector database using Change Data Capture (CDC), Apache Kafka, PySpark Structured Streaming, Ollama, and Qdrant.
 
-The entire stack is optimized to run locally on Apple Silicon (M-series) with a highly constrained memory footprint.
-
----
-
-## 🏗️ Architecture
-
-1. **Source Database (PostgreSQL)**  
-   Configured with `wal_level = logical`. Acts as the active data generator.
-
-2. **CDC Engine (Debezium)**  
-   Trails the Postgres Write-Ahead Log (WAL), captures row-level changes in real time, and publishes them.
-
-3. **Event Broker (Apache Kafka)**  
-   Serves as the immutable, distributed messaging nervous system.
-
-4. **Stream Processing (PySpark Structured Streaming)**  
-   Consumes raw binary JSON events from Kafka, strips metadata, and isolates the payload.
-
-5. **Local AI Brain (Ollama)**  
-   Runs the highly optimized `nomic-embed-text` model locally to convert raw text into 768-dimensional embeddings on the fly.
-
-6. **Vector Sink (Qdrant)**  
-   A custom micro-batch Python function sinks the vectorized data into Qdrant for immediate semantic retrieval.
+Traditional RAG systems typically rely on scheduled ETL jobs to regenerate embeddings, introducing synchronization delays and unnecessary recomputation. This project demonstrates an event-driven alternative where every database mutation is captured directly from PostgreSQL's Write-Ahead Log (WAL) and propagated through a streaming pipeline, enabling near real-time semantic indexing.
 
 ---
 
-## 📁 Repository Structure
+# 🚀 Highlights
+
+- Real-time Change Data Capture (CDC) using PostgreSQL WAL
+- Event-driven architecture with Debezium and Apache Kafka
+- Continuous processing using PySpark Structured Streaming
+- Local embedding generation with Ollama (`nomic-embed-text`)
+- Automatic synchronization with Qdrant Vector Database
+- Fully local deployment optimized for Apple Silicon
+- No external LLM or embedding APIs required
+
+---
+
+# 🏗️ Architecture
+
+> **Note:** *Architecture diagram can be added here.*
+
+```text
+             PostgreSQL
+                  │
+      Logical Replication (WAL)
+                  │
+                  ▼
+             Debezium CDC
+                  │
+                  ▼
+            Apache Kafka
+                  │
+                  ▼
+     PySpark Structured Streaming
+                  │
+      Parse → Embed → foreachBatch
+                  │
+                  ▼
+       Ollama (nomic-embed-text)
+                  │
+                  ▼
+              Qdrant
+                  │
+                  ▼
+          Semantic Search
+```
+
+---
+
+# ⚙️ Pipeline Overview
+
+### **Source Database (PostgreSQL)**
+
+Configured with:
+
+```text
+wal_level = logical
+```
+
+Acts as the transactional source of truth.
+
+---
+
+### **CDC Engine (Debezium)**
+
+Continuously monitors PostgreSQL's Write-Ahead Log (WAL) and converts row-level database mutations into Kafka events without polling the database.
+
+---
+
+### **Event Broker (Apache Kafka)**
+
+Acts as the immutable messaging layer that decouples producers from downstream consumers.
+
+---
+
+### **Stream Processing (PySpark Structured Streaming)**
+
+Consumes CDC events from Kafka and performs:
+
+- JSON parsing
+- Metadata removal
+- Payload extraction
+- Micro-batch processing
+- Embedding generation
+- Vector upsert into Qdrant
+
+---
+
+### **Local AI (Ollama)**
+
+Runs the lightweight `nomic-embed-text` embedding model locally to generate 768-dimensional embeddings without relying on external APIs.
+
+---
+
+### **Vector Database (Qdrant)**
+
+Stores vector embeddings and enables low-latency semantic retrieval.
+
+---
+
+# 📁 Repository Structure
 
 ```text
 .
 ├── main/
-│   └── spark_rag_consumer.py   # PySpark streaming job and Qdrant sink logic
-├── qdrant_storage/             # Local volume mapping for persistent vector data
+│   └── spark_rag_consumer.py     # Spark streaming job and Qdrant sink
+│
 ├── search/
-│   └── search.py               # CLI script to test semantic search
-├── docker-compose.yml          # Infrastructure (Postgres, Zookeeper, Kafka, Debezium, Qdrant)
-└── README.md
+│   └── search.py                 # Semantic search CLI
+│
+├── docker-compose.yml            # PostgreSQL, Kafka, Debezium, Qdrant
+├── README.md
+└── .gitignore
 ```
 
 ---
 
-## ⚙️ Prerequisites
+# 🔄 Data Flow
 
-- **Hardware:** Tested on macOS (M2 Apple Silicon, 8GB Unified Memory)
-- **Docker Desktop:** Memory limit constrained to ~4GB
-- **Python:** Version 3.10+
-- **Java:** OpenJDK 17 (Required for modern PySpark)
-- **LLM Engine:** [Ollama](https://ollama.ai/) installed locally
+```text
+INSERT INTO PostgreSQL
+
+        │
+
+        ▼
+
+ Write-Ahead Log (WAL)
+
+        │
+
+        ▼
+
+    Debezium CDC
+
+        │
+
+        ▼
+
+     Kafka Topic
+
+        │
+
+        ▼
+
+Spark Structured Streaming
+
+        │
+
+        ▼
+
+Generate Embeddings
+
+        │
+
+        ▼
+
+Qdrant
+
+        │
+
+        ▼
+
+Semantic Search
+```
 
 ---
 
-## 🚀 Setup & Execution
+# 💡 Engineering Decisions
 
-### 1. Initialize the Infrastructure
+## Why Change Data Capture?
 
-Spin up PostgreSQL, Zookeeper, Kafka, Debezium, and Qdrant in detached mode.
+Instead of periodically polling PostgreSQL using queries like:
+
+```sql
+SELECT *
+FROM articles
+WHERE updated_at > ...
+```
+
+Debezium reads directly from PostgreSQL's Write-Ahead Log (WAL), enabling near real-time synchronization.
+
+**Benefits**
+
+- Lower database load
+- Low-latency event propagation
+- Event-driven synchronization
+- Automatic capture of every database mutation
+
+---
+
+## Why Apache Kafka?
+
+Kafka serves as the event backbone of the architecture, decoupling producers and consumers while allowing additional downstream systems to subscribe without impacting the source database.
+
+---
+
+## Why PySpark Structured Streaming?
+
+Although this workload could be processed by a lightweight Kafka consumer, Spark Structured Streaming was intentionally chosen to demonstrate production-grade streaming patterns such as:
+
+- Fault tolerance
+- Checkpointing
+- Micro-batch execution
+- Horizontal scalability
+
+The architecture can scale to higher event throughput with minimal code changes.
+
+---
+
+## Why Ollama?
+
+Embedding generation runs entirely on the local machine.
+
+**Benefits**
+
+- No API cost
+- Low latency
+- Offline execution
+- Improved data privacy
+
+---
+
+## Why `foreachBatch` Instead of a Spark UDF?
+
+Embedding generation is executed inside the `foreachBatch` sink instead of a Spark UDF. This avoids Python serialization (`cloudpickle`) issues commonly encountered when network-heavy dependencies such as `requests` are executed inside distributed Spark workers.
+
+---
+
+## Memory Optimization
+
+The Spark application is intentionally configured with:
+
+```text
+Driver Memory     : 1 GB
+Executor Memory   : 1 GB
+```
+
+allowing the complete infrastructure to run comfortably on an Apple Silicon laptop with 8 GB unified memory.
+
+---
+
+# ⚙️ Prerequisites
+
+- macOS (Apple Silicon recommended)
+- Docker Desktop
+- Python 3.10+
+- OpenJDK 17
+- Ollama
+
+---
+
+# 🚀 Setup
+
+### 1. Start Infrastructure
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ---
 
-### 2. Configure the Embedding Model
-
-Pull the lightweight embedding model into your local Ollama instance.
+### 2. Pull the Embedding Model
 
 ```bash
 ollama pull nomic-embed-text
@@ -75,11 +270,7 @@ ollama pull nomic-embed-text
 
 ---
 
-### 3. Configure the Python Environment
-
-Create an isolated environment and install the required dependencies.
-
-> **Note:** PySpark is pinned to **3.5.1** to maintain compatibility with Scala **2.12** and the Kafka SQL connector.
+### 3. Create the Python Environment
 
 ```bash
 python3 -m venv venv
@@ -91,39 +282,27 @@ pip install pyspark==3.5.1 requests qdrant-client
 
 ---
 
-### 4. Patch Network Routing *(macOS Specific)*
-
-If you encounter IPv6 routing exceptions (`java.net.SocketException`) when PySpark attempts to download Maven packages, force the JVM to use IPv4.
+### 4. macOS Networking Fix
 
 ```bash
 export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
 
-export SPARK_LOCAL_IP="127.0.0.1"
+export SPARK_LOCAL_IP=127.0.0.1
 ```
 
 ---
 
 ### 5. Start the Streaming Consumer
 
-Boot the PySpark streaming engine. This process will run continuously, polling the Kafka topic for new database events.
-
 ```bash
-python3 main/spark_rag_consumer.py
+python main/spark_rag_consumer.py
 ```
 
 ---
 
-### 6. Verify the Pipeline
+# 🧪 Verify the Pipeline
 
-Connect to the local PostgreSQL instance.
-
-| Property | Value |
-|----------|-------|
-| Port | `5432` |
-| Username | `postgres` |
-| Password | `postgres` |
-
-Insert a new record into the `articles` table.
+Insert a record into PostgreSQL.
 
 ```sql
 INSERT INTO articles (title, content)
@@ -133,29 +312,112 @@ VALUES (
 );
 ```
 
-After inserting the record:
+The record flows through:
 
-- Check your active terminal—PySpark will log a successful micro-batch push to Qdrant within milliseconds.
-- Run the semantic search script to query the vector database.
+```text
+PostgreSQL
+
+↓
+
+Debezium
+
+↓
+
+Kafka
+
+↓
+
+Spark Structured Streaming
+
+↓
+
+Ollama
+
+↓
+
+Qdrant
+
+↓
+
+Semantic Search
+```
+
+Run the semantic search client.
 
 ```bash
-python3 search/search.py
+python search/search.py
 ```
 
 ---
 
-## 🧠 Engineering & Technical Notes
+# 📊 Sample Streaming Logs
 
-### Memory Optimization
+The streaming consumer initializes the Spark session, consumes CDC events from Kafka, generates embeddings using Ollama, and continuously pushes vectors into Qdrant through Spark micro-batches.
 
-The PySpark `SparkSession` is strictly capped at **1 GB** for both driver and executor memory. This prevents heavy JVM swapping and allows the entire enterprise stack to run seamlessly on an **8 GB** machine alongside Docker.
+```text
+26/07/19 14:19:19 WARN NativeCodeLoader:
+Unable to load native-hadoop library for your platform...
+using builtin-java classes where applicable.
 
-### Serialization Bypass
+Setting default log level to "WARN".
 
-The Ollama HTTP request logic is executed purely within standard Python inside the `foreachBatch` sink rather than using a PySpark UDF. This completely bypasses `cloudpickle` stack overflow bugs common in newer Python versions (3.12+) when attempting to serialize deep network dependencies like `requests`.
+26/07/19 14:19:21 WARN ResolveWriteToStream:
+Temporary checkpoint location created.
+
+26/07/19 14:19:21 WARN ResolveWriteToStream:
+spark.sql.adaptive.enabled is not supported in
+streaming DataFrames/Datasets and will be disabled.
+
+🚀 Batch 1: Embedded & pushed 1 vectors to Qdrant!
+
+🚀 Batch 2: Embedded & pushed 4 vectors to Qdrant!
+```
+
+The logs confirm that Spark Structured Streaming successfully consumes Kafka events, generates embeddings locally, and incrementally synchronizes vectors into Qdrant.
 
 ---
 
-## 👤 Author
+# 🔍 Sample Search Output
 
-**Hritik** | Data Engineer
+> *Run the following command after inserting records into PostgreSQL:*
+
+```bash
+python search/search.py
+```
+
+> **Search Output**
+
+```text
+🔍 Searching for: 'What are the benefits of real-time data streaming over batch?'
+
+🎯 Match Score: 0.6827
+📌 Title: AI in Data Engineering
+📄 Content: Streaming CDC architectures reduce latency compared to batch ETL pipelines.
+--------------------------------------------------
+🎯 Match Score: 0.6200
+📌 Title: The Evolution of CDC
+📄 Content: Change Data Capture ensures that downstream systems stay in perfect sync with the primary database by streaming transaction logs.
+--------------------------------------------------
+```
+
+This verifies that newly inserted PostgreSQL records become searchable shortly after flowing through the CDC → Kafka → Spark → Ollama → Qdrant pipeline.
+
+---
+
+# 📈 Future Improvements
+
+- Support UPDATE and DELETE events
+- Batch embedding generation
+- Metadata filtering
+- Hybrid keyword + vector search
+- FastAPI search service
+- Kubernetes deployment
+- Monitoring with Prometheus and Grafana
+
+---
+
+# 👨‍💻 Author
+
+**Hritik Maheshwari**
+
+Data Engineer | Streaming Systems | Distributed Data Platforms | AI Infrastructure
