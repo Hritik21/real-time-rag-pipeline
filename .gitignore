@@ -1,0 +1,17 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Qdrant persistent storage
+qdrant_storage/
+
+# Spark
+spark-warehouse/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
